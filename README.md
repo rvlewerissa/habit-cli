@@ -13,16 +13,24 @@ A minimalist, local-first TUI for tracking daily habits. Built with Go and [Bubb
 
 ## Installation
 
+### Using Go (Recommended)
+
 ```bash
-# Clone the repository
+go install github.com/vl/habit-cli/cmd/hbt@latest
+```
+
+Then run:
+```bash
+hbt
+```
+
+### From Source
+
+```bash
 git clone https://github.com/vl/habit-cli.git
 cd habit-cli
-
-# Build
-go build -o habit-cli .
-
-# Run
-./habit-cli
+go build -o hbt ./cmd/hbt
+./hbt
 ```
 
 ## Usage
@@ -53,6 +61,13 @@ go build -o habit-cli .
 ## Data Storage
 
 Data is stored in `~/.habit-cli/habits.db` (SQLite database).
+
+## Development
+
+Seed test data for development:
+```bash
+hbt --seed
+```
 
 ## Tech Stack
 
