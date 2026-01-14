@@ -138,10 +138,11 @@ func TitledPanel(title, content string, width, height int) string {
 
 	// Content area with side borders
 	contentStyle := lipgloss.NewStyle().
-		Width(width - 4). // -4 for borders and padding
-		Height(height - 2). // -2 for top and bottom borders
-		PaddingLeft(1).
-		PaddingRight(1)
+		Width(width - 6). // -6 for borders and padding
+		Height(height - 3). // -3 for top/bottom borders and top padding
+		PaddingLeft(2).
+		PaddingRight(2).
+		PaddingTop(1)
 
 	contentLines := strings.Split(contentStyle.Render(content), "\n")
 	var middle string

@@ -58,8 +58,8 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("enter", "select"),
 	),
 	Toggle: key.NewBinding(
-		key.WithKeys(" ", "x"),
-		key.WithHelp("space/x", "toggle"),
+		key.WithKeys(" ", "enter"),
+		key.WithHelp("space/enter", "toggle"),
 	),
 	Add: key.NewBinding(
 		key.WithKeys("a"),
@@ -97,7 +97,7 @@ var DefaultKeyMap = KeyMap{
 
 // ShortHelp returns the short help for the key map
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Add, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.Add, k.Quit}
 }
 
 // FullHelp returns the full help for the key map
