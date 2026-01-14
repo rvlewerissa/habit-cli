@@ -20,7 +20,7 @@ func main() {
 	defer database.Close()
 
 	// Create and run the application
-	model := app.New(database, dbPath)
+	model := app.New(database)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

@@ -127,18 +127,22 @@ func (m *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 		case "left":
 			if m.focusedField == fieldFrequency {
 				m.prevFrequency()
+				return *m, nil
 			} else if m.focusedField == fieldCategory {
 				m.prevCategory()
+				return *m, nil
 			}
-			return *m, nil
+			// Fall through to let text inputs handle left arrow
 
 		case "right":
 			if m.focusedField == fieldFrequency {
 				m.nextFrequency()
+				return *m, nil
 			} else if m.focusedField == fieldCategory {
 				m.nextCategory()
+				return *m, nil
 			}
-			return *m, nil
+			// Fall through to let text inputs handle right arrow
 		}
 	}
 
@@ -268,7 +272,7 @@ func (m *FormModel) GetHabit() *model.Habit {
 	return m.habit
 }
 
-// View renders the form
+// View renders the form (with title)
 func (m *FormModel) View() string {
 	title := "Add Habit"
 	if m.isEdit {
@@ -277,6 +281,13 @@ func (m *FormModel) View() string {
 
 	var s string
 	s += ui.Title.Render(title) + "\n\n"
+	s += m.ViewContent()
+	return s
+}
+
+// ViewContent renders just the form fields without title
+func (m *FormModel) ViewContent() string {
+	var s string
 
 	// Name field
 	s += m.renderField("Name", m.nameInput.View(), m.focusedField == fieldName)

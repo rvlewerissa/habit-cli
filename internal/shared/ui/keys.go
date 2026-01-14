@@ -97,7 +97,7 @@ var DefaultKeyMap = KeyMap{
 
 // ShortHelp returns the short help for the key map
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.Add, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Add, k.Quit}
 }
 
 // FullHelp returns the full help for the key map
@@ -105,8 +105,8 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.NextTab, k.PrevTab},
-		{k.Select, k.Toggle, k.Add, k.Edit, k.Delete},
+		{k.Select, k.Add, k.Edit, k.Delete},
 		{k.Back, k.Confirm, k.Cancel},
-		{k.Help, k.Quit},
+		{k.Quit},
 	}
 }

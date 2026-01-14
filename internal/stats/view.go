@@ -250,3 +250,70 @@ func (m Model) renderHabitStats() string {
 func (m Model) Focused() bool {
 	return false
 }
+
+// RenderPanel renders a compact stats panel for the sidebar
+func (m Model) RenderPanel(width, height int) string {
+	var s string
+
+	if m.err != nil {
+		s += ui.MutedText.Render("Error loading stats")
+		return ui.TitledPanel("Stats", s, width, height)
+	}
+
+	if m.overview == nil {
+		s += ui.MutedText.Render("Loading...")
+		return ui.TitledPanel("Stats", s, width, height)
+	}
+
+	// Today's progress
+	s += lipgloss.NewStyle().Bold(true).Render("Today") + "\n"
+	todayCompleted := 0
+	todayTotal := 0
+	if len(m.dailyStats) > 0 {
+		todayCompleted = m.dailyStats[0].Completed
+		todayTotal = m.dailyStats[0].Total
+	}
+	if todayTotal > 0 {
+		pct := float64(todayCompleted) / float64(todayTotal) * 100
+		s += fmt.Sprintf("  %d/%d completed (%.0f%%)\n", todayCompleted, todayTotal, pct)
+	} else {
+		s += "  No habits due\n"
+	}
+	s += "\n"
+
+	// Streaks
+	s += lipgloss.NewStyle().Bold(true).Render("Streaks") + "\n"
+	s += fmt.Sprintf("  Current best: %d days\n", m.overview.CurrentBestStreak)
+	s += fmt.Sprintf("  All-time: %d days\n", m.overview.AllTimeBestStreak)
+	s += "\n"
+
+	// Weekly sparkline
+	if len(m.dailyStats) > 0 {
+		s += lipgloss.NewStyle().Bold(true).Render("Last 7 Days") + "\n"
+
+		var values []float64
+		limit := 7
+		if len(m.dailyStats) < limit {
+			limit = len(m.dailyStats)
+		}
+		for i := limit - 1; i >= 0; i-- {
+			stat := m.dailyStats[i]
+			if stat.Total > 0 {
+				values = append(values, float64(stat.Completed)/float64(stat.Total)*100)
+			} else {
+				values = append(values, 0)
+			}
+		}
+
+		spark := NewSparkline(width - 8)
+		s += "  " + spark.Render(values) + "\n"
+	}
+	s += "\n"
+
+	// Overall stats
+	s += lipgloss.NewStyle().Bold(true).Render("Overall") + "\n"
+	s += fmt.Sprintf("  %d habits\n", m.overview.TotalHabits)
+	s += fmt.Sprintf("  %.0f%% completion rate\n", m.overview.OverallRate)
+
+	return ui.TitledPanel("Stats", s, width, height)
+}

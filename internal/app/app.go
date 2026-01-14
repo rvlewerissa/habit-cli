@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vl/habit-cli/internal/habits"
-	"github.com/vl/habit-cli/internal/settings"
 	"github.com/vl/habit-cli/internal/shared/db"
 	"github.com/vl/habit-cli/internal/shared/ui"
 	"github.com/vl/habit-cli/internal/stats"
@@ -19,11 +18,11 @@ type Tab int
 const (
 	TabToday Tab = iota
 	TabHabits
-	TabStats
-	TabSettings
 )
 
-var tabNames = []string{"Today", "Habits", "Stats", "Settings"}
+const numTabs = 2
+
+var tabNames = []string{"Today", "Habits"}
 
 // Model is the main application model
 type Model struct {
@@ -36,23 +35,21 @@ type Model struct {
 	ready     bool
 
 	// Tab models
-	todayModel    today.Model
-	habitsModel   habits.Model
-	statsModel    stats.Model
-	settingsModel settings.Model
+	todayModel  today.Model
+	habitsModel habits.Model
+	statsModel  stats.Model
 }
 
 // New creates a new application model
-func New(database *db.DB, dbPath string) Model {
+func New(database *db.DB) Model {
 	return Model{
-		db:            database,
-		keys:          ui.DefaultKeyMap,
-		help:          help.New(),
-		activeTab:     TabToday,
-		todayModel:    today.New(database),
-		habitsModel:   habits.New(database),
-		statsModel:    stats.New(database),
-		settingsModel: settings.New(database, dbPath),
+		db:          database,
+		keys:        ui.DefaultKeyMap,
+		help:        help.New(),
+		activeTab:   TabToday,
+		todayModel:  today.New(database),
+		habitsModel: habits.New(database),
+		statsModel:  stats.New(database),
 	}
 }
 
@@ -62,7 +59,6 @@ func (m Model) Init() tea.Cmd {
 		m.todayModel.Init(),
 		m.habitsModel.Init(),
 		m.statsModel.Init(),
-		m.settingsModel.Init(),
 	)
 }
 
@@ -85,19 +81,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.NextTab):
 			oldTab := m.activeTab
-			m.activeTab = (m.activeTab + 1) % 4
+			m.activeTab = (m.activeTab + 1) % numTabs
 			cmds = append(cmds, m.reloadTabData(oldTab)...)
 			return m, tea.Batch(cmds...)
 
 		case key.Matches(msg, m.keys.PrevTab):
 			oldTab := m.activeTab
-			m.activeTab = (m.activeTab - 1 + 4) % 4
+			m.activeTab = (m.activeTab - 1 + numTabs) % numTabs
 			cmds = append(cmds, m.reloadTabData(oldTab)...)
 			return m, tea.Batch(cmds...)
-
-		case key.Matches(msg, m.keys.Help):
-			m.help.ShowAll = !m.help.ShowAll
-			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
@@ -117,14 +109,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.habitsModel, cmd = m.habitsModel.Update(msg)
 		cmds = append(cmds, cmd)
-	case TabStats:
-		var cmd tea.Cmd
-		m.statsModel, cmd = m.statsModel.Update(msg)
-		cmds = append(cmds, cmd)
-	case TabSettings:
-		var cmd tea.Cmd
-		m.settingsModel, cmd = m.settingsModel.Update(msg)
-		cmds = append(cmds, cmd)
 	}
 
 	// Route today messages regardless of active tab
@@ -133,6 +117,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.todayModel, cmd = m.todayModel.Update(msg)
 		cmds = append(cmds, cmd)
+		// Also reload stats when completion changes
+		cmds = append(cmds, m.statsModel.Init())
 	}
 
 	// Route habit messages regardless of active tab
@@ -141,6 +127,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.habitsModel, cmd = m.habitsModel.Update(msg)
 		cmds = append(cmds, cmd)
+		// Also reload stats when habits change
+		cmds = append(cmds, m.statsModel.Init())
 	}
 
 	// Route stats messages regardless of active tab
@@ -148,14 +136,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stats.StatsLoadedMsg:
 		var cmd tea.Cmd
 		m.statsModel, cmd = m.statsModel.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
-	// Route settings messages regardless of active tab
-	switch msg.(type) {
-	case settings.SettingsLoadedMsg:
-		var cmd tea.Cmd
-		m.settingsModel, cmd = m.settingsModel.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -168,9 +148,6 @@ func (m Model) reloadTabData(oldTab Tab) []tea.Cmd {
 	if m.activeTab == TabToday && oldTab != TabToday {
 		cmds = append(cmds, m.todayModel.Init())
 	}
-	if m.activeTab == TabStats && oldTab != TabStats {
-		cmds = append(cmds, m.statsModel.Init())
-	}
 	return cmds
 }
 
@@ -180,27 +157,27 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// Render tab bar
-	tabBar := m.renderTabBar()
+	// Render main content with stats panel (includes tab bar in left column)
+	content := m.renderMainContent()
 
-	// Render current tab content
-	content := m.renderTabContent()
-
-	// Render help
+	// Render help bar
 	helpView := m.help.View(m.keys)
 
-	// Combine everything
-	return ui.Container.Render(
-		lipgloss.JoinVertical(
-			lipgloss.Left,
-			tabBar,
-			content,
-			helpView,
-		),
-	)
+	// Combine everything with explicit top padding via newlines
+	return "\n\n" + lipgloss.NewStyle().
+		PaddingLeft(2).
+		PaddingRight(2).
+		PaddingBottom(1).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				content,
+				helpView,
+			),
+		)
 }
 
-func (m Model) renderTabBar() string {
+func (m Model) renderTabBar(width int) string {
 	var tabs []string
 	for i, name := range tabNames {
 		if Tab(i) == m.activeTab {
@@ -209,28 +186,42 @@ func (m Model) renderTabBar() string {
 			tabs = append(tabs, ui.InactiveTab.Render(name))
 		}
 	}
-	return ui.TabBar.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...))
+	tabContent := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return ui.TabBar.Width(width).Render(tabContent)
 }
 
-func (m Model) renderTabContent() string {
-	// Calculate available height for content
-	contentHeight := m.height - 8 // Account for tab bar, help, padding
+func (m Model) renderMainContent() string {
+	// Calculate dimensions
+	contentHeight := m.height - 10 // Account for tab bar, help, padding
+	totalWidth := m.width - 4
 
-	contentStyle := lipgloss.NewStyle().
-		Width(m.width - 4).
-		Height(contentHeight)
+	// 60/40 split
+	leftWidth := int(float64(totalWidth) * 0.6)
+	rightWidth := totalWidth - leftWidth - 1 // -1 for gap
 
-	var content string
+	// Render tab bar for left column only
+	tabBar := m.renderTabBar(leftWidth)
+
+	// Render left panel (tab content)
+	var leftContent string
+	var panelTitle string
 	switch m.activeTab {
 	case TabToday:
-		content = m.todayModel.View()
+		leftContent = m.todayModel.ViewContent()
+		panelTitle = "Today"
 	case TabHabits:
-		content = m.habitsModel.View()
-	case TabStats:
-		content = m.statsModel.View()
-	case TabSettings:
-		content = m.settingsModel.View()
+		leftContent = m.habitsModel.ViewContent()
+		panelTitle = "Habits"
 	}
 
-	return contentStyle.Render(content)
+	leftPanel := ui.TitledPanel(panelTitle, leftContent, leftWidth, contentHeight)
+
+	// Combine tab bar and left panel
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, tabBar, leftPanel)
+
+	// Render right panel (stats) - add extra height for tab bar
+	rightPanel := m.statsModel.RenderPanel(rightWidth, contentHeight+3)
+
+	// Join horizontally
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", rightPanel)
 }

@@ -168,14 +168,14 @@ func (r *Repository) GetHabitStats() ([]HabitStats, error) {
 func (r *Repository) GetOverallStats() (completed, total int, err error) {
 	query := `
 		SELECT
-			(SELECT COUNT(*) FROM completions c
+			COALESCE((SELECT COUNT(*) FROM completions c
 			 JOIN habits h ON c.habit_id = h.id
-			 WHERE h.archived_at IS NULL) as completed,
-			(SELECT SUM(
+			 WHERE h.archived_at IS NULL), 0) as completed,
+			COALESCE((SELECT SUM(
 				CAST(julianday('now', 'localtime') - julianday(h.created_at) + 1 AS INTEGER)
 			 ) FROM habits h
 			 WHERE h.archived_at IS NULL
-			 AND h.frequency_type = 'daily') as total
+			 AND h.frequency_type = 'daily'), 0) as total
 	`
 	err = r.db.QueryRow(query).Scan(&completed, &total)
 	return

@@ -1,11 +1,15 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Colors
 var (
-	Primary     = lipgloss.Color("#7C3AED") // Purple
-	Secondary   = lipgloss.Color("#06B6D4") // Cyan
+	Primary     = lipgloss.Color("#06B6D4") // Cyan
+	Secondary   = lipgloss.Color("#8B5CF6") // Purple
 	Success     = lipgloss.Color("#10B981") // Green
 	Warning     = lipgloss.Color("#F59E0B") // Amber
 	Danger      = lipgloss.Color("#EF4444") // Red
@@ -86,7 +90,10 @@ var (
 // Layout
 var (
 	Container = lipgloss.NewStyle().
-			Padding(1, 2)
+			PaddingTop(2).
+			PaddingBottom(1).
+			PaddingLeft(2).
+			PaddingRight(2)
 
 	Title = lipgloss.NewStyle().
 		Bold(true).
@@ -109,4 +116,58 @@ func CategoryTag(name, color string) string {
 		Foreground(lipgloss.Color("#000000")).
 		Padding(0, 1).
 		Render(name)
+}
+
+// TitledPanel renders a panel with the title inline with the top border
+// Format: ╭─ Title ─────────────╮
+func TitledPanel(title, content string, width, height int) string {
+	borderColor := lipgloss.NewStyle().Foreground(Border)
+	titleStyle := lipgloss.NewStyle().Foreground(Primary).Bold(true)
+
+	// Build top border with title
+	titleText := " " + title + " "
+	titleLen := len(titleText)
+	remainingWidth := width - 2 - titleLen - 1 // -2 for corners, -1 for initial dash
+	if remainingWidth < 0 {
+		remainingWidth = 0
+	}
+
+	topBorder := borderColor.Render("╭─") +
+		titleStyle.Render(titleText) +
+		borderColor.Render(repeat("─", remainingWidth)+"╮")
+
+	// Content area with side borders
+	contentStyle := lipgloss.NewStyle().
+		Width(width - 4). // -4 for borders and padding
+		Height(height - 2). // -2 for top and bottom borders
+		PaddingLeft(1).
+		PaddingRight(1)
+
+	contentLines := strings.Split(contentStyle.Render(content), "\n")
+	var middle string
+	for _, line := range contentLines {
+		// Pad line to fill width
+		lineWidth := lipgloss.Width(line)
+		padding := width - 2 - lineWidth // -2 for side borders
+		if padding < 0 {
+			padding = 0
+		}
+		middle += borderColor.Render("│") + line + strings.Repeat(" ", padding) + borderColor.Render("│") + "\n"
+	}
+
+	// Bottom border
+	bottomBorder := borderColor.Render("╰" + repeat("─", width-2) + "╯")
+
+	return topBorder + "\n" + middle + bottomBorder
+}
+
+func repeat(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	result := ""
+	for i := 0; i < n; i++ {
+		result += s
+	}
+	return result
 }

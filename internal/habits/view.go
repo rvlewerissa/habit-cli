@@ -121,14 +121,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		// Update form first if active, so it receives key events
+		if m.mode == modeForm && m.form != nil {
+			var cmd tea.Cmd
+			*m.form, cmd = m.form.Update(msg)
+			// Check if form state changed
+			if m.form.cancelled {
+				m.mode = modeList
+				m.form = nil
+				return m, nil
+			} else if m.form.submitted {
+				return m, m.saveHabit(m.form.GetHabit())
+			}
+			return m, cmd
+		}
 		return m.handleKey(msg)
-	}
-
-	// Update form if active
-	if m.mode == modeForm && m.form != nil {
-		var cmd tea.Cmd
-		*m.form, cmd = m.form.Update(msg)
-		return m, cmd
 	}
 
 	return m, nil
@@ -206,7 +213,7 @@ func (m Model) deleteHabit(id int64) tea.Cmd {
 	}
 }
 
-// View renders the habits tab
+// View renders the habits tab (with title)
 func (m Model) View() string {
 	if m.err != nil {
 		return ui.MutedText.Render(fmt.Sprintf("Error: %v", m.err))
@@ -224,9 +231,33 @@ func (m Model) View() string {
 	return m.renderList()
 }
 
+// ViewContent renders just the content without title (for titled panels)
+func (m Model) ViewContent() string {
+	if m.err != nil {
+		return ui.MutedText.Render(fmt.Sprintf("Error: %v", m.err))
+	}
+
+	switch m.mode {
+	case modeForm:
+		if m.form != nil {
+			return m.form.ViewContent()
+		}
+	case modeConfirmDelete:
+		return m.renderConfirmDeleteContent()
+	}
+
+	return m.renderListContent()
+}
+
 func (m Model) renderList() string {
 	var s string
 	s += ui.Title.Render("Manage Habits") + "\n\n"
+	s += m.renderListContent()
+	return s
+}
+
+func (m Model) renderListContent() string {
+	var s string
 
 	if len(m.habits) == 0 {
 		s += ui.MutedText.Render("No habits yet. Press 'a' to add one.")
@@ -276,11 +307,18 @@ func (m Model) formatFrequency(h model.Habit) string {
 }
 
 func (m Model) renderConfirmDelete() string {
-	habit := m.habits[m.cursor]
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		ui.Title.Render("Delete Habit"),
 		"",
+		m.renderConfirmDeleteContent(),
+	)
+}
+
+func (m Model) renderConfirmDeleteContent() string {
+	habit := m.habits[m.cursor]
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
 		fmt.Sprintf("Are you sure you want to delete '%s'?", habit.Name),
 		"",
 		ui.MutedText.Render("y: confirm  n: cancel"),

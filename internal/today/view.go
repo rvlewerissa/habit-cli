@@ -110,17 +110,26 @@ func (m Model) toggleCompletion(habitID int64) tea.Cmd {
 	}
 }
 
-// View renders the today tab
+// View renders the today tab (with title)
 func (m Model) View() string {
+	var s string
+	date := time.Now().Format("Monday, January 2")
+	s += ui.Title.Render("Today - " + date) + "\n\n"
+	s += m.ViewContent()
+	return s
+}
+
+// ViewContent renders just the content without title (for titled panels)
+func (m Model) ViewContent() string {
 	if m.err != nil {
 		return ui.MutedText.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
 	var s string
 
-	// Header with date
+	// Date subtitle
 	date := time.Now().Format("Monday, January 2")
-	s += ui.Title.Render("Today - " + date) + "\n\n"
+	s += ui.MutedText.Render(date) + "\n\n"
 
 	if len(m.habits) == 0 {
 		s += ui.MutedText.Render("No habits yet. Switch to the Habits tab to add some.")
@@ -141,15 +150,13 @@ func (m Model) View() string {
 	// Progress
 	if dueCount > 0 {
 		progress := fmt.Sprintf("%d/%d completed", completedCount, dueCount)
-		s += ui.Subtitle.Render(progress) + "\n\n"
+		s += ui.Subtitle.Render(progress) + "\n"
 	}
 
 	// Habit list
 	for i, habit := range m.habits {
 		s += m.renderHabit(i, habit) + "\n"
 	}
-
-	s += "\n" + ui.MutedText.Render("space/enter: toggle  j/k: navigate")
 
 	return s
 }
