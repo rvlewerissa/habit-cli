@@ -1,6 +1,18 @@
-# habit-cli
+<p align="center">
+  <img src="public/hbt-banner.png" alt="hbt banner" width="100%">
+</p>
 
-A minimalist, local-first TUI for tracking daily habits. Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+<p align="center">
+  <a href="https://github.com/vittolewerissa/hbt/stargazers"><img src="https://img.shields.io/github/stars/vittolewerissa/hbt?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/vittolewerissa/hbt/releases"><img src="https://img.shields.io/github/v/tag/vittolewerissa/hbt?label=version&style=flat-square" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/vittolewerissa/hbt/commits"><img src="https://img.shields.io/github/commit-activity/m/vittolewerissa/hbt?style=flat-square" alt="Commits"></a>
+  <a href="https://twitter.com/vittolewerissa"><img src="https://img.shields.io/badge/follow-vittolewerissa-blue?style=flat-square&logo=Twitter" alt="Twitter"></a>
+</p>
+
+<p align="center">
+  A minimalist, local-first TUI for tracking daily habits. Built with Go and <a href="https://github.com/charmbracelet/bubbletea">Bubble Tea</a>.
+</p>
 
 ## Features
 
