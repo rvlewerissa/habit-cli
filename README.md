@@ -62,13 +62,6 @@ go build -o hbt ./cmd/hbt
 
 Data is stored in `~/.habit-cli/habits.db` (SQLite database).
 
-## Development
-
-Seed test data for development:
-```bash
-hbt --seed
-```
-
 ## Tech Stack
 
 - [Go](https://go.dev/)
