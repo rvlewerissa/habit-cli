@@ -264,34 +264,103 @@ func (m Model) renderListContent() string {
 		return s
 	}
 
-	for i, habit := range m.habits {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "> "
-		}
+	// Group habits by category
+	type categoryGroup struct {
+		category *model.Category
+		habits   []model.Habit
+	}
 
-		name := habit.Name
-		if i == m.cursor {
-			name = ui.SelectedItem.Render(name)
+	categoryMap := make(map[int64]*categoryGroup)
+	var uncategorized []model.Habit
+
+	for _, habit := range m.habits {
+		if habit.Category != nil {
+			catID := habit.Category.ID
+			if categoryMap[catID] == nil {
+				categoryMap[catID] = &categoryGroup{
+					category: habit.Category,
+					habits:   []model.Habit{},
+				}
+			}
+			categoryMap[catID].habits = append(categoryMap[catID].habits, habit)
 		} else {
-			name = ui.NormalItem.Render(name)
+			uncategorized = append(uncategorized, habit)
+		}
+	}
+
+	// Render categorized habits
+	currentIndex := 0
+	firstCategory := true
+	for _, cat := range m.categories {
+		if group, exists := categoryMap[cat.ID]; exists {
+			// Add horizontal separator before category (except first)
+			if !firstCategory {
+				s += ui.MutedText.Render("────────────────────────────────") + "\n"
+			}
+			firstCategory = false
+
+			// Category header with emoji
+			emoji := cat.Emoji
+			if emoji == "" {
+				emoji = "📁"
+			}
+
+			titleStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color(cat.Color))
+
+			s += titleStyle.Render(cat.Name + " " + emoji) + "\n"
+
+			// Build habits list for this category
+			for _, habit := range group.habits {
+				s += m.renderHabitLine(habit, currentIndex) + "\n"
+				currentIndex++
+			}
+		}
+	}
+
+	// Render uncategorized habits
+	if len(uncategorized) > 0 {
+		// Add horizontal separator if there were categories before
+		if !firstCategory {
+			s += ui.MutedText.Render("────────────────────────────────") + "\n"
 		}
 
-		freq := m.formatFrequency(habit)
-
-		line := fmt.Sprintf("%s%s %s", cursor, name, ui.MutedText.Render(freq))
-
-		if habit.Category != nil && habit.Category.Emoji != "" {
-			// Use custom emoji from category (optional)
-			line += " " + habit.Category.Emoji
+		s += ui.MutedText.Render("Uncategorized") + "\n"
+		for _, habit := range uncategorized {
+			s += m.renderHabitLine(habit, currentIndex) + "\n"
+			currentIndex++
 		}
-
-		s += line + "\n"
 	}
 
 	s += "\n" + ui.MutedText.Render("a: add  e: edit  d: delete")
 
 	return s
+}
+
+func (m Model) renderHabitLine(habit model.Habit, index int) string {
+	cursor := "  "
+	if index == m.cursor {
+		cursor = "> "
+	}
+
+	// Show habit emoji if set
+	habitEmoji := ""
+	if habit.Emoji != "" {
+		habitEmoji = habit.Emoji + " "
+	}
+
+	name := habit.Name
+	if index == m.cursor {
+		name = ui.SelectedItem.Render(name)
+	} else {
+		name = ui.NormalItem.Render(name)
+	}
+
+	freq := m.formatFrequency(habit)
+	line := fmt.Sprintf("%s%s%s %s", cursor, habitEmoji, name, ui.MutedText.Render(freq))
+
+	return line
 }
 
 func (m Model) formatFrequency(h model.Habit) string {
@@ -329,4 +398,20 @@ func (m Model) renderConfirmDeleteContent() string {
 // Focused returns whether this view should receive key events
 func (m Model) Focused() bool {
 	return m.mode == modeForm
+}
+
+// HasModal returns true if showing a modal dialog
+func (m Model) HasModal() bool {
+	return m.mode == modeForm && m.form != nil && (m.form.showCategoryModal || m.form.showEmojiModal)
+}
+
+// RenderModalContent renders just the modal box content for overlay
+func (m Model) RenderModalContent() string {
+	if !m.HasModal() {
+		return ""
+	}
+	if m.form.showEmojiModal {
+		return m.form.renderEmojiModalBox()
+	}
+	return m.form.renderCategoryModalBox()
 }

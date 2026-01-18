@@ -16,6 +16,7 @@ type Habit struct {
 	ID             int64
 	Name           string
 	Description    string
+	Emoji          string
 	CategoryID     *int64
 	FrequencyType  FrequencyType
 	FrequencyValue int // times per week if FrequencyType is times_per_week

@@ -348,10 +348,15 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				f.nameInput.Blur()
 				return *f, nil
 			case "enter":
-				// Select current emoji
-				filtered := f.getFilteredEmojis()
-				if len(filtered) > 0 && f.emojiIndex < len(filtered) {
-					f.selectedEmoji = filtered[f.emojiIndex]
+				// Select current emoji or clear it
+				if f.emojiIndex == -1 {
+					// Clear emoji
+					f.selectedEmoji = ""
+				} else {
+					filtered := f.getFilteredEmojis()
+					if len(filtered) > 0 && f.emojiIndex < len(filtered) {
+						f.selectedEmoji = filtered[f.emojiIndex]
+					}
 				}
 				f.showEmojiModal = false
 				f.emojiSearch.SetValue("")
@@ -361,24 +366,39 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				f.nameInput.Blur()
 				return *f, nil
 			case "left":
-				if f.emojiIndex > 0 {
-					f.emojiIndex--
-					f.ensureVisibleEmoji()
+				f.emojiIndex--
+				if f.emojiIndex < -1 {
+					filtered := f.getFilteredEmojis()
+					f.emojiIndex = len(filtered) - 1
 				}
+				f.ensureVisibleEmoji()
 			case "right":
 				filtered := f.getFilteredEmojis()
-				if f.emojiIndex < len(filtered)-1 {
-					f.emojiIndex++
-					f.ensureVisibleEmoji()
+				f.emojiIndex++
+				if f.emojiIndex >= len(filtered) {
+					f.emojiIndex = -1
 				}
+				f.ensureVisibleEmoji()
 			case "up":
-				if f.emojiIndex >= 8 {
+				if f.emojiIndex == -1 {
+					// Already at (none), can't go up
+					return *f, nil
+				} else if f.emojiIndex < 8 {
+					// In first row, go to (none)
+					f.emojiIndex = -1
+					f.ensureVisibleEmoji()
+				} else {
+					// Go up one row
 					f.emojiIndex -= 8
 					f.ensureVisibleEmoji()
 				}
 			case "down":
 				filtered := f.getFilteredEmojis()
-				if f.emojiIndex+8 < len(filtered) {
+				if f.emojiIndex == -1 {
+					// From (none), go to first emoji
+					f.emojiIndex = 0
+					f.ensureVisibleEmoji()
+				} else if f.emojiIndex+8 < len(filtered) {
 					f.emojiIndex += 8
 					f.ensureVisibleEmoji()
 				}
@@ -386,8 +406,8 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				// Scroll up by visible rows
 				const maxVisibleRows = 8
 				f.emojiIndex -= 8 * maxVisibleRows
-				if f.emojiIndex < 0 {
-					f.emojiIndex = 0
+				if f.emojiIndex < -1 {
+					f.emojiIndex = -1
 				}
 				f.ensureVisibleEmoji()
 			case "pgdown":
@@ -402,7 +422,7 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			default:
 				// Update search input
 				f.emojiSearch, cmd = f.emojiSearch.Update(msg)
-				f.emojiIndex = 0 // Reset selection when searching
+				f.emojiIndex = -1 // Reset to (none) when searching
 				f.scrollOffset = 0
 				return *f, cmd
 			}
@@ -422,6 +442,12 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				// On emoji field - open picker
 				f.showEmojiModal = true
 				f.emojiSearch.Focus()
+				// Start at (none) if no emoji selected, otherwise start at first emoji
+				if f.selectedEmoji == "" {
+					f.emojiIndex = -1
+				} else {
+					f.emojiIndex = 0
+				}
 				return *f, textinput.Blink
 			} else if f.focusIndex == 0 && f.nameInput.Value() != "" {
 				// On name field with text - move to emoji field
@@ -466,6 +492,12 @@ func (f *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			if f.focusIndex == 1 {
 				f.showEmojiModal = true
 				f.emojiSearch.Focus()
+				// Start at (none) if no emoji selected, otherwise start at first emoji
+				if f.selectedEmoji == "" {
+					f.emojiIndex = -1
+				} else {
+					f.emojiIndex = 0
+				}
 				return *f, textinput.Blink
 			}
 		}
@@ -499,6 +531,12 @@ func (f *FormModel) ensureVisibleEmoji() {
 	const emojisPerRow = 8
 	const maxVisibleRows = 8 // Maximum rows to show at once
 
+	// If (none) is selected, scroll to top
+	if f.emojiIndex == -1 {
+		f.scrollOffset = 0
+		return
+	}
+
 	filtered := f.getFilteredEmojis()
 	if len(filtered) == 0 {
 		return
@@ -531,10 +569,6 @@ func (f *FormModel) ensureVisibleEmoji() {
 }
 
 func (f *FormModel) ViewContent() string {
-	if f.showEmojiModal {
-		return f.renderEmojiModal()
-	}
-
 	var s string
 
 	// Name input
@@ -574,11 +608,6 @@ func (f *FormModel) ViewContent() string {
 	return s
 }
 
-func (f *FormModel) renderEmojiModal() string {
-	// This is deprecated - use renderFullScreenModal instead
-	return ""
-}
-
 func (f *FormModel) renderModalBox() string {
 	var s string
 
@@ -587,6 +616,15 @@ func (f *FormModel) renderModalBox() string {
 
 	// Search input
 	s += "Search: " + f.emojiSearch.View() + "\n\n"
+
+	// Show (none) option
+	noneText := "(none)"
+	if f.emojiIndex == -1 {
+		s += "[" + noneText + "]" + "\n"
+	} else {
+		s += " " + noneText + " " + "\n"
+	}
+	s += "\n"
 
 	// Show filtered emoji grid - 8 per row, max 8 rows visible
 	const emojisPerRow = 8

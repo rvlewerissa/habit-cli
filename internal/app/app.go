@@ -190,6 +190,10 @@ func (m Model) View() string {
 		// Render the modal with transparent overlay showing background
 		return m.renderWithModal()
 	}
+	if m.activeTab == TabHabits && m.habitsModel.HasModal() {
+		// Render the modal with transparent overlay showing background
+		return m.renderWithModal()
+	}
 
 	// Render main content with stats panel (includes tab bar in left column)
 	content := m.renderMainContent()
@@ -237,8 +241,13 @@ func (m Model) renderWithModal() string {
 			),
 		)
 
-	// Get the modal content
-	modalContent := m.categoriesModel.RenderModalContent()
+	// Get the modal content based on active tab
+	var modalContent string
+	if m.activeTab == TabCategories {
+		modalContent = m.categoriesModel.RenderModalContent()
+	} else if m.activeTab == TabHabits {
+		modalContent = m.habitsModel.RenderModalContent()
+	}
 
 	// Overlay the modal on the full screen
 	return m.overlayModalOnBase(baseView, modalContent)

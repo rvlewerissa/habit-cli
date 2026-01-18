@@ -21,13 +21,13 @@ func NewRepository(database *db.DB) *Repository {
 // List returns all non-archived habits
 func (r *Repository) List() ([]model.Habit, error) {
 	query := `
-		SELECT h.id, h.name, h.description, h.category_id, h.frequency_type,
+		SELECT h.id, h.name, h.description, h.emoji, h.category_id, h.frequency_type,
 		       h.frequency_value, h.created_at, h.archived_at,
-		       c.id, c.name, c.color
+		       c.id, c.name, c.color, c.emoji
 		FROM habits h
 		LEFT JOIN categories c ON h.category_id = c.id
 		WHERE h.archived_at IS NULL
-		ORDER BY h.name
+		ORDER BY c.name NULLS LAST, h.name
 	`
 	return r.queryHabits(query)
 }
@@ -35,9 +35,9 @@ func (r *Repository) List() ([]model.Habit, error) {
 // ListAll returns all habits including archived
 func (r *Repository) ListAll() ([]model.Habit, error) {
 	query := `
-		SELECT h.id, h.name, h.description, h.category_id, h.frequency_type,
+		SELECT h.id, h.name, h.description, h.emoji, h.category_id, h.frequency_type,
 		       h.frequency_value, h.created_at, h.archived_at,
-		       c.id, c.name, c.color
+		       c.id, c.name, c.color, c.emoji
 		FROM habits h
 		LEFT JOIN categories c ON h.category_id = c.id
 		ORDER BY h.archived_at IS NULL DESC, h.name
@@ -48,9 +48,9 @@ func (r *Repository) ListAll() ([]model.Habit, error) {
 // GetByID returns a habit by ID
 func (r *Repository) GetByID(id int64) (*model.Habit, error) {
 	query := `
-		SELECT h.id, h.name, h.description, h.category_id, h.frequency_type,
+		SELECT h.id, h.name, h.description, h.emoji, h.category_id, h.frequency_type,
 		       h.frequency_value, h.created_at, h.archived_at,
-		       c.id, c.name, c.color
+		       c.id, c.name, c.color, c.emoji
 		FROM habits h
 		LEFT JOIN categories c ON h.category_id = c.id
 		WHERE h.id = ?
@@ -68,10 +68,10 @@ func (r *Repository) GetByID(id int64) (*model.Habit, error) {
 // Create creates a new habit
 func (r *Repository) Create(h *model.Habit) error {
 	query := `
-		INSERT INTO habits (name, description, category_id, frequency_type, frequency_value)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO habits (name, description, emoji, category_id, frequency_type, frequency_value)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	result, err := r.db.Exec(query, h.Name, h.Description, h.CategoryID, h.FrequencyType, h.FrequencyValue)
+	result, err := r.db.Exec(query, h.Name, h.Description, h.Emoji, h.CategoryID, h.FrequencyType, h.FrequencyValue)
 	if err != nil {
 		return err
 	}
@@ -88,10 +88,10 @@ func (r *Repository) Create(h *model.Habit) error {
 func (r *Repository) Update(h *model.Habit) error {
 	query := `
 		UPDATE habits
-		SET name = ?, description = ?, category_id = ?, frequency_type = ?, frequency_value = ?
+		SET name = ?, description = ?, emoji = ?, category_id = ?, frequency_type = ?, frequency_value = ?
 		WHERE id = ?
 	`
-	_, err := r.db.Exec(query, h.Name, h.Description, h.CategoryID, h.FrequencyType, h.FrequencyValue, h.ID)
+	_, err := r.db.Exec(query, h.Name, h.Description, h.Emoji, h.CategoryID, h.FrequencyType, h.FrequencyValue, h.ID)
 	return err
 }
 
@@ -127,13 +127,13 @@ func (r *Repository) queryHabits(query string, args ...interface{}) ([]model.Hab
 	for rows.Next() {
 		var h model.Habit
 		var categoryID, catID sql.NullInt64
-		var catName, catColor sql.NullString
+		var catName, catColor, catEmoji sql.NullString
 		var archivedAt sql.NullTime
 
 		err := rows.Scan(
-			&h.ID, &h.Name, &h.Description, &categoryID, &h.FrequencyType,
+			&h.ID, &h.Name, &h.Description, &h.Emoji, &categoryID, &h.FrequencyType,
 			&h.FrequencyValue, &h.CreatedAt, &archivedAt,
-			&catID, &catName, &catColor,
+			&catID, &catName, &catColor, &catEmoji,
 		)
 		if err != nil {
 			return nil, err
@@ -150,6 +150,7 @@ func (r *Repository) queryHabits(query string, args ...interface{}) ([]model.Hab
 				ID:    catID.Int64,
 				Name:  catName.String,
 				Color: catColor.String,
+				Emoji: catEmoji.String,
 			}
 		}
 

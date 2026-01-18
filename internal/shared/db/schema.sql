@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS habits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
+    emoji TEXT DEFAULT '',
     category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     frequency_type TEXT NOT NULL DEFAULT 'daily',
     frequency_value INTEGER DEFAULT 1,

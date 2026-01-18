@@ -16,6 +16,7 @@ type FormField int
 const (
 	fieldName FormField = iota
 	fieldDescription
+	fieldEmoji
 	fieldFrequency
 	fieldFrequencyValue
 	fieldCategory
@@ -23,19 +24,26 @@ const (
 
 // FormModel handles habit creation/editing
 type FormModel struct {
-	habit           *model.Habit
-	categories      []model.Category
-	nameInput       textinput.Model
-	descInput       textinput.Model
-	freqValueInput  textinput.Model
-	focusedField    FormField
-	frequencyType   model.FrequencyType
-	categoryIndex   int // -1 for no category
-	width           int
-	height          int
-	submitted       bool
-	cancelled       bool
-	isEdit          bool
+	habit              *model.Habit
+	categories         []model.Category
+	nameInput          textinput.Model
+	descInput          textinput.Model
+	emojiSearch        textinput.Model
+	freqValueInput     textinput.Model
+	focusedField       FormField
+	frequencyType      model.FrequencyType
+	selectedEmoji      string
+	emojiIndex         int
+	scrollOffset       int
+	showEmojiModal     bool
+	categoryIndex      int // -1 for no category
+	showCategoryModal  bool
+	categoryModalIndex int // Index within modal
+	width              int
+	height             int
+	submitted          bool
+	cancelled          bool
+	isEdit             bool
 }
 
 // NewForm creates a new form model
@@ -56,10 +64,16 @@ func NewForm(habit *model.Habit, categories []model.Category, width, height int)
 	freqValueInput.CharLimit = 2
 	freqValueInput.Width = 10
 
+	emojiSearch := textinput.New()
+	emojiSearch.Placeholder = "Search emojis..."
+	emojiSearch.CharLimit = 50
+	emojiSearch.Width = 30
+
 	m := &FormModel{
 		categories:     categories,
 		nameInput:      nameInput,
 		descInput:      descInput,
+		emojiSearch:    emojiSearch,
 		freqValueInput: freqValueInput,
 		frequencyType:  model.FreqDaily,
 		categoryIndex:  -1,
@@ -72,6 +86,7 @@ func NewForm(habit *model.Habit, categories []model.Category, width, height int)
 		m.isEdit = true
 		m.nameInput.SetValue(habit.Name)
 		m.descInput.SetValue(habit.Description)
+		m.selectedEmoji = habit.Emoji
 		m.frequencyType = habit.FrequencyType
 		m.freqValueInput.SetValue(fmt.Sprintf("%d", habit.FrequencyValue))
 
@@ -100,14 +115,137 @@ func (m *FormModel) Init() tea.Cmd {
 func (m *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle emoji modal if open
+		if m.showEmojiModal {
+			var cmd tea.Cmd
+			switch msg.String() {
+			case "esc":
+				m.showEmojiModal = false
+				m.emojiSearch.SetValue("")
+				m.emojiIndex = 0
+				m.scrollOffset = 0
+				return *m, nil
+			case "enter":
+				// Select current emoji or clear it
+				if m.emojiIndex == -1 {
+					m.selectedEmoji = ""
+				} else {
+					filtered := m.getFilteredEmojis()
+					if len(filtered) > 0 && m.emojiIndex < len(filtered) {
+						m.selectedEmoji = filtered[m.emojiIndex]
+					}
+				}
+				m.showEmojiModal = false
+				m.emojiSearch.SetValue("")
+				m.emojiIndex = 0
+				m.scrollOffset = 0
+				return *m, nil
+			case "left":
+				m.emojiIndex--
+				if m.emojiIndex < -1 {
+					filtered := m.getFilteredEmojis()
+					m.emojiIndex = len(filtered) - 1
+				}
+				m.ensureVisibleEmoji()
+			case "right":
+				filtered := m.getFilteredEmojis()
+				m.emojiIndex++
+				if m.emojiIndex >= len(filtered) {
+					m.emojiIndex = -1
+				}
+				m.ensureVisibleEmoji()
+			case "up":
+				if m.emojiIndex == -1 {
+					return *m, nil
+				} else if m.emojiIndex < 8 {
+					m.emojiIndex = -1
+					m.ensureVisibleEmoji()
+				} else {
+					m.emojiIndex -= 8
+					m.ensureVisibleEmoji()
+				}
+			case "down":
+				filtered := m.getFilteredEmojis()
+				if m.emojiIndex == -1 {
+					m.emojiIndex = 0
+					m.ensureVisibleEmoji()
+				} else if m.emojiIndex+8 < len(filtered) {
+					m.emojiIndex += 8
+					m.ensureVisibleEmoji()
+				}
+			case "pgup":
+				const maxVisibleRows = 8
+				m.emojiIndex -= 8 * maxVisibleRows
+				if m.emojiIndex < -1 {
+					m.emojiIndex = -1
+				}
+				m.ensureVisibleEmoji()
+			case "pgdown":
+				const maxVisibleRows = 8
+				filtered := m.getFilteredEmojis()
+				m.emojiIndex += 8 * maxVisibleRows
+				if m.emojiIndex >= len(filtered) {
+					m.emojiIndex = len(filtered) - 1
+				}
+				m.ensureVisibleEmoji()
+			default:
+				m.emojiSearch, cmd = m.emojiSearch.Update(msg)
+				m.emojiIndex = -1
+				m.scrollOffset = 0
+				return *m, cmd
+			}
+			return *m, nil
+		}
+
+		// Handle category modal if open
+		if m.showCategoryModal {
+			switch msg.String() {
+			case "esc":
+				m.showCategoryModal = false
+				return *m, nil
+			case "enter":
+				// Select current category
+				m.categoryIndex = m.categoryModalIndex
+				m.showCategoryModal = false
+				return *m, nil
+			case "up":
+				m.categoryModalIndex--
+				if m.categoryModalIndex < -1 {
+					m.categoryModalIndex = len(m.categories) - 1
+				}
+			case "down":
+				m.categoryModalIndex++
+				if m.categoryModalIndex >= len(m.categories) {
+					m.categoryModalIndex = -1
+				}
+			}
+			return *m, nil
+		}
+
 		switch msg.String() {
 		case "esc":
 			m.cancelled = true
 			return *m, nil
 
 		case "enter":
-			if m.focusedField == fieldCategory {
-				// Submit form
+			if m.focusedField == fieldEmoji {
+				// Open emoji modal
+				m.showEmojiModal = true
+				m.emojiSearch.Focus()
+				if m.selectedEmoji == "" {
+					m.emojiIndex = -1
+				} else {
+					m.emojiIndex = 0
+				}
+				return *m, textinput.Blink
+			} else if m.focusedField == fieldCategory {
+				// Open category modal
+				if len(m.categories) > 0 {
+					m.showCategoryModal = true
+					m.categoryModalIndex = m.categoryIndex
+					return *m, nil
+				}
+				// If no categories, submit form
 				if m.nameInput.Value() != "" {
 					m.submitted = true
 				}
@@ -115,6 +253,27 @@ func (m *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				m.nextField()
 			}
 			return *m, nil
+
+		case " ":
+			// Space on emoji field opens modal
+			if m.focusedField == fieldEmoji {
+				m.showEmojiModal = true
+				m.emojiSearch.Focus()
+				if m.selectedEmoji == "" {
+					m.emojiIndex = -1
+				} else {
+					m.emojiIndex = 0
+				}
+				return *m, textinput.Blink
+			}
+			// Space on category field opens modal
+			if m.focusedField == fieldCategory && len(m.categories) > 0 {
+				m.showCategoryModal = true
+				m.categoryModalIndex = m.categoryIndex
+				return *m, nil
+			}
+			// Don't consume space for text inputs
+			// Fall through
 
 		case "tab", "down":
 			m.nextField()
@@ -128,9 +287,6 @@ func (m *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			if m.focusedField == fieldFrequency {
 				m.prevFrequency()
 				return *m, nil
-			} else if m.focusedField == fieldCategory {
-				m.prevCategory()
-				return *m, nil
 			}
 			// Fall through to let text inputs handle left arrow
 
@@ -138,11 +294,27 @@ func (m *FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			if m.focusedField == fieldFrequency {
 				m.nextFrequency()
 				return *m, nil
-			} else if m.focusedField == fieldCategory {
-				m.nextCategory()
-				return *m, nil
 			}
 			// Fall through to let text inputs handle right arrow
+
+		case "backspace", "delete":
+			// Clear emoji if on emoji field
+			if m.focusedField == fieldEmoji && m.selectedEmoji != "" {
+				m.selectedEmoji = ""
+				return *m, nil
+			}
+			// Clear category if on category field
+			if m.focusedField == fieldCategory && m.categoryIndex >= 0 {
+				m.categoryIndex = -1
+				return *m, nil
+			}
+
+		case "ctrl+s":
+			// Ctrl+S to save from anywhere
+			if m.nameInput.Value() != "" {
+				m.submitted = true
+				return *m, nil
+			}
 		}
 	}
 
@@ -228,24 +400,12 @@ func (m *FormModel) prevFrequency() {
 	}
 }
 
-func (m *FormModel) nextCategory() {
-	m.categoryIndex++
-	if m.categoryIndex >= len(m.categories) {
-		m.categoryIndex = -1
-	}
-}
-
-func (m *FormModel) prevCategory() {
-	m.categoryIndex--
-	if m.categoryIndex < -1 {
-		m.categoryIndex = len(m.categories) - 1
-	}
-}
 
 // GetHabit returns the habit with form values
 func (m *FormModel) GetHabit() *model.Habit {
 	m.habit.Name = m.nameInput.Value()
 	m.habit.Description = m.descInput.Value()
+	m.habit.Emoji = m.selectedEmoji
 	m.habit.FrequencyType = m.frequencyType
 
 	if m.frequencyType == model.FreqTimesPerWeek {
@@ -295,6 +455,10 @@ func (m *FormModel) ViewContent() string {
 	// Description field
 	s += m.renderField("Description", m.descInput.View(), m.focusedField == fieldDescription)
 
+	// Emoji field
+	emojiDisplay := m.renderEmojiSelector(m.focusedField == fieldEmoji)
+	s += m.renderField("Emoji", emojiDisplay, m.focusedField == fieldEmoji)
+
 	// Frequency field
 	freqDisplay := m.renderFrequencySelector()
 	s += m.renderField("Frequency", freqDisplay, m.focusedField == fieldFrequency)
@@ -305,10 +469,12 @@ func (m *FormModel) ViewContent() string {
 	}
 
 	// Category field
-	catDisplay := m.renderCategorySelector()
+	catDisplay := m.renderCategorySelector(m.focusedField == fieldCategory)
 	s += m.renderField("Category", catDisplay, m.focusedField == fieldCategory)
 
-	s += "\n" + ui.MutedText.Render("tab/arrows: navigate  enter: submit  esc: cancel")
+	s += "\n" + ui.MutedText.Render("tab: navigate  enter/space: pick category  backspace: clear")
+	s += "\n"
+	s += ui.MutedText.Render("ctrl+s: save  esc: cancel")
 
 	return s
 }
@@ -343,15 +509,79 @@ func (m *FormModel) renderFrequencySelector() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, parts[0], " | ", parts[1], " | ", parts[2])
 }
 
-func (m *FormModel) renderCategorySelector() string {
+func (m *FormModel) renderCategorySelector(focused bool) string {
 	if len(m.categories) == 0 {
 		return ui.MutedText.Render("No categories")
 	}
 
+	var display string
 	if m.categoryIndex < 0 {
-		return ui.MutedText.Render("< None >")
+		display = "(none)"
+		if !focused {
+			return ui.MutedText.Render(display)
+		}
+	} else {
+		cat := m.categories[m.categoryIndex]
+		if cat.Emoji != "" {
+			display = cat.Emoji + " " + cat.Name
+		} else {
+			display = cat.Name
+		}
+		if !focused {
+			return display
+		}
 	}
 
-	cat := m.categories[m.categoryIndex]
-	return "< " + ui.CategoryTag(cat.Name, cat.Color) + " >"
+	// When focused, show with brackets
+	return ui.SelectedItem.Render("[" + display + "]")
+}
+
+// renderCategoryModalBox renders the category picker modal content
+func (m *FormModel) renderCategoryModalBox() string {
+	var s string
+
+	// Modal title
+	s += ui.Title.Render("Pick a Category") + "\n\n"
+
+	// Show categories list
+	if len(m.categories) == 0 {
+		s += ui.MutedText.Render("No categories available") + "\n"
+	} else {
+		// None option
+		noneText := "(none)"
+		if m.categoryModalIndex == -1 {
+			s += "[" + noneText + "]" + "\n"
+		} else {
+			s += " " + noneText + " " + "\n"
+		}
+		s += "\n"
+
+		// Category options
+		for i, cat := range m.categories {
+			catText := cat.Name
+			if cat.Emoji != "" {
+				catText = cat.Emoji + " " + catText
+			}
+
+			if i == m.categoryModalIndex {
+				s += "[" + catText + "]" + "\n"
+			} else {
+				s += " " + catText + " " + "\n"
+			}
+		}
+	}
+	s += "\n"
+
+	s += ui.MutedText.Render("↑↓: navigate  enter: select  esc: cancel")
+
+	// Add modal box styling with dark background
+	modalWidth := 40
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ui.Primary).
+		Background(lipgloss.Color("#1F2937")).
+		Padding(1, 2).
+		Width(modalWidth)
+
+	return modalStyle.Render(s)
 }

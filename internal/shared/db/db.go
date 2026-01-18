@@ -56,6 +56,7 @@ func migrate(db *sql.DB) error {
 	// Add emoji column if it doesn't exist (for existing databases)
 	// This will fail silently if the column already exists
 	_, _ = db.Exec("ALTER TABLE categories ADD COLUMN emoji TEXT DEFAULT '📁'")
+	_, _ = db.Exec("ALTER TABLE habits ADD COLUMN emoji TEXT DEFAULT ''")
 
 	return nil
 }
